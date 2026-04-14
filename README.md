@@ -268,15 +268,32 @@ Or in your MCP client configuration:
 
 ### Behavior
 
+All WebDAV file operations are covered — both reads and writes:
+
 | Tool | Effect |
 |------|--------|
 | **list_directory** | Excluded files/folders are omitted from listings |
 | **read_file** | Returns an access denied error |
+| **write_file** | Returns an access denied error |
+| **create_directory** | Blocked inside excluded paths |
+| **delete_resource** | Returns an access denied error |
+| **move_resource, copy_resource** | Blocked if source or destination is excluded |
 | **search_files, find_by_name, find_by_type** | Excluded files are filtered from results |
 | **list_favorites** | Excluded files are filtered from results |
 
 > [!TIP]
 > Tag a top-level folder like `Confidential/` to hide all its contents recursively — no need to tag individual files.
+
+### Security considerations
+
+This feature uses Nextcloud **system tags** (collaborative tags), which are managed via the admin interface. To prevent users from bypassing exclusions by removing tags:
+
+1. Create tags in **Settings > Administration > Tags**
+2. Set tags as **not user-assignable** (`user_assignable=false`) — users can see the tag but cannot add or remove it from files
+3. Optionally set tags as **not user-visible** (`user_visible=false`) for fully hidden exclusions
+
+> [!IMPORTANT]
+> If a tag is user-assignable, any Nextcloud user (including the one whose credentials the MCP server uses) can remove the tag and bypass the exclusion. Always use non-assignable tags for security-critical exclusions.
 
 ## Contributing
 

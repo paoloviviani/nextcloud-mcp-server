@@ -169,6 +169,11 @@ def configure_webdav_tools(mcp: FastMCP):
         """
         client = await get_client(ctx)
 
+        # Block writing to excluded paths
+        excluded = await get_excluded_file_paths(client.webdav)
+        if is_path_excluded(path, excluded):
+            raise ToolError(f"Access denied: '{path}' is tagged with an excluded tag")
+
         # Handle base64 encoded content
         if content_type and "base64" in content_type.lower():
             content_bytes = base64.b64decode(content)
@@ -197,6 +202,14 @@ def configure_webdav_tools(mcp: FastMCP):
             Dict with status_code (201 for created, 405 if already exists)
         """
         client = await get_client(ctx)
+
+        # Block creating directories inside excluded paths
+        excluded = await get_excluded_file_paths(client.webdav)
+        if is_path_excluded(path, excluded):
+            raise ToolError(
+                f"Access denied: '{path}' is inside a path tagged with an excluded tag"
+            )
+
         return await client.webdav.create_directory(path)
 
     @mcp.tool(
@@ -219,6 +232,12 @@ def configure_webdav_tools(mcp: FastMCP):
             Dict with status_code indicating result (404 if not found)
         """
         client = await get_client(ctx)
+
+        # Block deleting excluded files/directories
+        excluded = await get_excluded_file_paths(client.webdav)
+        if is_path_excluded(path, excluded):
+            raise ToolError(f"Access denied: '{path}' is tagged with an excluded tag")
+
         return await client.webdav.delete_resource(path)
 
     @mcp.tool(
@@ -244,6 +263,19 @@ def configure_webdav_tools(mcp: FastMCP):
             Dict with status_code indicating result (404 if source not found, 412 if destination exists and overwrite is False)
         """
         client = await get_client(ctx)
+
+        # Block moving excluded files or moving into excluded paths
+        excluded = await get_excluded_file_paths(client.webdav)
+        if is_path_excluded(source_path, excluded):
+            raise ToolError(
+                f"Access denied: source '{source_path}' is tagged with an excluded tag"
+            )
+        if is_path_excluded(destination_path, excluded):
+            raise ToolError(
+                f"Access denied: destination '{destination_path}' is inside "
+                f"a path tagged with an excluded tag"
+            )
+
         return await client.webdav.move_resource(
             source_path, destination_path, overwrite
         )
@@ -271,6 +303,19 @@ def configure_webdav_tools(mcp: FastMCP):
             Dict with status_code indicating result (404 if source not found, 412 if destination exists and overwrite is False)
         """
         client = await get_client(ctx)
+
+        # Block copying excluded files or copying into excluded paths
+        excluded = await get_excluded_file_paths(client.webdav)
+        if is_path_excluded(source_path, excluded):
+            raise ToolError(
+                f"Access denied: source '{source_path}' is tagged with an excluded tag"
+            )
+        if is_path_excluded(destination_path, excluded):
+            raise ToolError(
+                f"Access denied: destination '{destination_path}' is inside "
+                f"a path tagged with an excluded tag"
+            )
+
         return await client.webdav.copy_resource(
             source_path, destination_path, overwrite
         )
