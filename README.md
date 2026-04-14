@@ -229,6 +229,55 @@ AI: "Find notes related to machine learning concepts"
 
 **Note:** For AI-generated answers with citations, use `nc_semantic_search_answer` (requires MCP client with sampling support).
 
+## Tag-Based File Exclusion
+
+Control which files the AI assistant can access by tagging them in Nextcloud. Files (or entire folders) tagged with any of the configured tags are hidden from all WebDAV MCP tools — they won't appear in listings, searches, or be readable.
+
+### Setup
+
+1. **Create a system tag** in Nextcloud (Settings > Administration > Tags), e.g. `no-ai`
+2. **Tag files or folders** you want to hide — tagging a folder hides everything inside it
+3. **Set the `EXCLUDED_TAGS` environment variable** (comma-separated tag names):
+
+```bash
+NEXTCLOUD_HOST=https://your.nextcloud.instance.com \
+NEXTCLOUD_USERNAME=your_username \
+NEXTCLOUD_PASSWORD=your_app_password \
+EXCLUDED_TAGS=no-ai,confidential \
+  uvx nextcloud-mcp-server run --transport stdio
+```
+
+Or in your MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "nextcloud": {
+      "command": "uvx",
+      "args": ["nextcloud-mcp-server", "run", "--transport", "stdio"],
+      "env": {
+        "NEXTCLOUD_HOST": "https://your.nextcloud.instance.com",
+        "NEXTCLOUD_USERNAME": "your_username",
+        "NEXTCLOUD_PASSWORD": "your_app_password",
+        "EXCLUDED_TAGS": "no-ai,confidential"
+      }
+    }
+  }
+}
+```
+
+### Behavior
+
+| Tool | Effect |
+|------|--------|
+| **list_directory** | Excluded files/folders are omitted from listings |
+| **read_file** | Returns an access denied error |
+| **search_files, find_by_name, find_by_type** | Excluded files are filtered from results |
+| **list_favorites** | Excluded files are filtered from results |
+
+> [!TIP]
+> Tag a top-level folder like `Confidential/` to hide all its contents recursively — no need to tag individual files.
+
 ## Contributing
 
 Contributions are welcome!

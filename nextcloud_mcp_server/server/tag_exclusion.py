@@ -4,10 +4,12 @@ Resolves configured EXCLUDED_TAGS to a set of file paths that should be
 hidden from MCP tools (list, read, search).  Uses Nextcloud's systemtags
 WebDAV API: for each excluded tag name -> resolve tag ID -> fetch tagged
 file paths via REPORT.
+
+Tagging a **folder** excludes the folder itself *and* everything inside it
+(recursive exclusion via path-prefix matching).
 """
 
 import logging
-from typing import Any
 
 from nextcloud_mcp_server.client.webdav import WebDAVClient
 from nextcloud_mcp_server.config import get_settings
@@ -27,12 +29,16 @@ def get_excluded_tag_names() -> list[str]:
 async def get_excluded_file_paths(webdav: WebDAVClient) -> set[str]:
     """Collect all file paths that carry an excluded tag.
 
+    For tagged **directories** the normalised directory path is included,
+    which causes ``is_path_excluded`` to block every child path as well
+    (prefix match on ``<dir>/``).
+
     Args:
         webdav: An authenticated WebDAVClient instance.
 
     Returns:
-        A set of normalised file paths (leading ``/`` stripped, no
-        trailing ``/``) that should be hidden.
+        A set of normalised file paths (no leading/trailing ``/``) that
+        should be hidden.
     """
     tag_names = get_excluded_tag_names()
     if not tag_names:
@@ -50,10 +56,16 @@ async def get_excluded_file_paths(webdav: WebDAVClient) -> set[str]:
         for f in files:
             path = _normalise_path(f["path"])
             excluded.add(path)
+            if f.get("is_directory"):
+                logger.debug(
+                    "Excluding directory '%s' (tag '%s') — children will be hidden",
+                    path,
+                    tag_name,
+                )
 
     if excluded:
         logger.info(
-            "Excluding %d file(s) matching tags: %s",
+            "Excluding %d path(s) matching tags: %s",
             len(excluded),
             ", ".join(tag_names),
         )
@@ -62,27 +74,23 @@ async def get_excluded_file_paths(webdav: WebDAVClient) -> set[str]:
 
 
 def is_path_excluded(path: str, excluded_paths: set[str]) -> bool:
-    """Check whether *path* (or any of its parents) is excluded."""
+    """Check whether *path* (or any of its parents) is excluded.
+
+    A path is excluded when:
+    - It matches an excluded path exactly, **or**
+    - It is a child of an excluded directory (prefix match on ``<dir>/``).
+    """
     if not excluded_paths:
         return False
     normalised = _normalise_path(path)
-    # Direct match
+    # Direct match (file or directory itself)
     if normalised in excluded_paths:
         return True
-    # Check if the file sits inside an excluded directory
+    # Child of an excluded directory
     for exc in excluded_paths:
         if normalised.startswith(exc + "/"):
             return True
     return False
-
-
-def filter_items(
-    items: list[dict[str, Any]], excluded_paths: set[str]
-) -> list[dict[str, Any]]:
-    """Remove items whose ``path`` key matches an excluded path."""
-    if not excluded_paths:
-        return items
-    return [i for i in items if not is_path_excluded(i.get("path", ""), excluded_paths)]
 
 
 def _normalise_path(path: str) -> str:
