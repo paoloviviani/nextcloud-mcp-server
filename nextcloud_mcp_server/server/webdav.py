@@ -2,12 +2,17 @@ import base64
 import logging
 
 from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from nextcloud_mcp_server.auth import require_scopes
 from nextcloud_mcp_server.context import get_client
 from nextcloud_mcp_server.models import DirectoryListing, FileInfo, SearchFilesResponse
 from nextcloud_mcp_server.observability.metrics import instrument_tool
+from nextcloud_mcp_server.server.tag_exclusion import (
+    get_excluded_file_paths,
+    is_path_excluded,
+)
 from nextcloud_mcp_server.utils.document_parser import (
     is_parseable_document,
     parse_document,
@@ -40,6 +45,10 @@ def configure_webdav_tools(mcp: FastMCP):
         """
         client = await get_client(ctx)
         items = await client.webdav.list_directory(path)
+
+        # Filter out files with excluded tags
+        excluded = await get_excluded_file_paths(client.webdav)
+        items = [i for i in items if not is_path_excluded(i.get("path", ""), excluded)]
 
         # Convert to FileInfo models
         file_infos = [FileInfo(**item) for item in items]
@@ -80,6 +89,12 @@ def configure_webdav_tools(mcp: FastMCP):
             - Other binary files are base64 encoded
         """
         client = await get_client(ctx)
+
+        # Block reading files with excluded tags
+        excluded = await get_excluded_file_paths(client.webdav)
+        if is_path_excluded(path, excluded):
+            raise ToolError(f"Access denied: '{path}' is tagged with an excluded tag")
+
         content, content_type = await client.webdav.read_file(path)
 
         # Check if this is a parseable document (PDF, DOCX, etc.)
@@ -364,6 +379,12 @@ def configure_webdav_tools(mcp: FastMCP):
             limit=limit,
         )
 
+        # Filter out files with excluded tags
+        excluded = await get_excluded_file_paths(client.webdav)
+        results = [
+            r for r in results if not is_path_excluded(r.get("path", ""), excluded)
+        ]
+
         # Convert to FileInfo models
         file_infos = [FileInfo(**result) for result in results]
 
@@ -409,6 +430,10 @@ def configure_webdav_tools(mcp: FastMCP):
         results = await client.webdav.find_by_name(
             pattern=pattern, scope=scope, limit=limit
         )
+        excluded = await get_excluded_file_paths(client.webdav)
+        results = [
+            r for r in results if not is_path_excluded(r.get("path", ""), excluded)
+        ]
         file_infos = [FileInfo(**result) for result in results]
         return SearchFilesResponse(
             results=file_infos,
@@ -443,6 +468,10 @@ def configure_webdav_tools(mcp: FastMCP):
         results = await client.webdav.find_by_type(
             mime_type=mime_type, scope=scope, limit=limit
         )
+        excluded = await get_excluded_file_paths(client.webdav)
+        results = [
+            r for r in results if not is_path_excluded(r.get("path", ""), excluded)
+        ]
         file_infos = [FileInfo(**result) for result in results]
         return SearchFilesResponse(
             results=file_infos,
@@ -474,6 +503,10 @@ def configure_webdav_tools(mcp: FastMCP):
         """
         client = await get_client(ctx)
         results = await client.webdav.list_favorites(scope=scope, limit=limit)
+        excluded = await get_excluded_file_paths(client.webdav)
+        results = [
+            r for r in results if not is_path_excluded(r.get("path", ""), excluded)
+        ]
         file_infos = [FileInfo(**result) for result in results]
         return SearchFilesResponse(
             results=file_infos,
