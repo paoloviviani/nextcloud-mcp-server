@@ -233,6 +233,8 @@ AI: "Find notes related to machine learning concepts"
 
 Control which files the AI assistant can access by tagging them in Nextcloud. Files (or entire folders) tagged with any of the configured tags are hidden from all WebDAV MCP tools — they won't appear in listings, searches, or be readable.
 
+The purpose of this feature is to **prevent accidental data exfiltration via the API** — for example, files containing PII or other regulated data that must not be sent to external AI providers. It is not designed to hide files from trusted users: each user remains responsible for the data they have direct access to in Nextcloud. This is a defense-in-depth layer that stops the AI assistant from reading or modifying sensitive content, not a security boundary against malicious users.
+
 ### Setup
 
 1. **Create a system tag** in Nextcloud (Settings > Administration > Tags), e.g. `no-ai`
@@ -294,6 +296,12 @@ This feature uses Nextcloud **system tags** (collaborative tags), which are mana
 
 > [!IMPORTANT]
 > If a tag is user-assignable, any Nextcloud user (including the one whose credentials the MCP server uses) can remove the tag and bypass the exclusion. Always use non-assignable tags for security-critical exclusions.
+
+### Scope and limitations
+
+- **WebDAV only**: Exclusion is enforced on the 11 WebDAV file tools. Other apps (Notes, Calendar, Contacts, Collectives, Deck, etc.) are not filtered. If a Collectives page or a Note references an excluded file by name or link, the reference text will be visible — but calling `read_file` on that path will still be blocked.
+- **Not a secrecy mechanism**: The AI may learn that an excluded file *exists* (e.g. from a link in a page, or from a search result in another app). The goal is to prevent the file's *content* from being sent over the API, not to hide its existence.
+- **Trusted users**: This feature assumes users are trusted and responsible for data they can see directly in Nextcloud. It does not protect against a user who deliberately pastes sensitive content into a chat.
 
 ## Contributing
 
